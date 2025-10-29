@@ -1,18 +1,32 @@
 name: Build Docker Image
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: '要构建的分支名称'
+        required: true
+        default: 'main'
+        type: string
+      version:
+        description: '版本标签 (可选，留空则使用分支名)'
+        required: false
+        default: ''
+        type: string
+      push_image:
+        description: '是否推送镜像到库'
+        required: true
+        default: true
+        type: boolean
+      create_release_tag:
+        description: '是否创建发布标签'
+        required: false
+        default: false
+        type: boolean
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: grok-api
 
 jobs:
   build-and-push:
@@ -21,6 +35,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     
     strategy:
       fail-fast: false
@@ -36,6 +51,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'main' }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -53,19 +70,19 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # 分支推送
-            type=ref,event=branch,suffix=-${{ matrix.suffix }}
-            # 语义化版本：完整版本号
-            type=semver,pattern={{version}},suffix=-${{ matrix.suffix }}
-            # latest标签
-            type=raw,value=latest-${{ matrix.suffix }},enable={{is_default_branch}}
+            # 自定义版本标签
+            type=raw,value=${{ github.event.inputs.version || github.event.inputs.branch }},suffix=-${{ matrix.suffix }},enable=${{ github.event.inputs.version != '' }}
+            # 分支标签
+            type=raw,value=${{ github.event.inputs.branch }},suffix=-${{ matrix.suffix }},enable=${{ github.event.inputs.version == '' }}
+            # latest标签 (仅当分支为main时)
+            type=raw,value=latest-${{ matrix.suffix }},enable=${{ github.event.inputs.branch == 'main' && github.event.inputs.version == '' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.event.inputs.push_image == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.suffix }}
@@ -76,10 +93,11 @@ jobs:
   merge-manifests:
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: github.event_name != 'pull_request'
+    if: github.event.inputs.push_image == 'true'
     permissions:
       contents: read
       packages: write
+      attestations: write
     
     steps:
       - name: Log in to Container Registry
@@ -95,9 +113,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            # 自定义版本标签
+            type=raw,value=${{ github.event.inputs.version || github.event.inputs.branch }},enable=${{ github.event.inputs.version != '' }}
+            # 分支标签
+            type=raw,value=${{ github.event.inputs.branch }},enable=${{ github.event.inputs.version == '' }}
+            # latest标签 (仅当分支为main时)
+            type=raw,value=latest,enable=${{ github.event.inputs.branch == 'main' && github.event.inputs.version == '' }}
       
       - name: Create and push manifest
         run: |
@@ -108,3 +129,13 @@ jobs:
               ${tag}-amd64 \
               ${tag}-arm64
           done
+
+      - name: Create Git tag (if requested)
+        if: github.event.inputs.create_release_tag == 'true' && github.event.inputs.version != ''
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "创建 Git 标签: $VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin "$VERSION"
