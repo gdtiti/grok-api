@@ -41,12 +41,17 @@ def build_hf_docker_image(registry, repository, version, platform):
     """构建 HuggingFace Space 专用的 Docker 镜像"""
     tag = f"{registry}/{repository}:hf-{platform}-{version}"
 
+    # 确定基础镜像
+    base_image = f"{registry}/{repository}:{version}"
+
     print(f"构建 HuggingFace Space 镜像: {tag}")
+    print(f"使用基础镜像: {base_image}")
 
     cmd = [
         'docker', 'build',
         '-f', 'hf/Dockerfile',
         '-t', tag,
+        '--build-arg', f'BASE_IMAGE={base_image}',
         '.'
     ]
 

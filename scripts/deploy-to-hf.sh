@@ -33,11 +33,15 @@ fi
 
 # 构建镜像
 TAG="${REGISTRY}/${REPOSITORY}:hf-${PLATFORM}-${VERSION}"
+BASE_IMAGE="${REGISTRY}/${REPOSITORY}:${VERSION}"
+
 echo "构建 HuggingFace Space 镜像: ${TAG}"
+echo "使用基础镜像: ${BASE_IMAGE}"
 
 docker build \
     -f hf/Dockerfile \
     -t "${TAG}" \
+    --build-arg "BASE_IMAGE=${BASE_IMAGE}" \
     .
 
 # 推送镜像

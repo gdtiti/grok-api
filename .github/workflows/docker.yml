@@ -36,7 +36,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository }}-api
 
 jobs:
   build-and-push:
@@ -45,6 +45,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     
     strategy:
       fail-fast: false
@@ -106,6 +107,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      attestations: write
     
     steps:
       - name: Log in to Container Registry
@@ -156,6 +158,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      attestations: write
 
     strategy:
       fail-fast: false
@@ -193,6 +196,17 @@ jobs:
             # HF专用标签
             type=raw,value=hf-${{ matrix.suffix }}-${{ github.event.inputs.version || github.event.inputs.branch }}
 
+      - name: Set base image for HF
+        id: base_image
+        run: |
+          if [[ "${{ github.event.inputs.version }}" != "" ]]; then
+            BASE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.version }}"
+          else
+            BASE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.branch }}"
+          fi
+          echo "base-image=$BASE_IMAGE" >> $GITHUB_OUTPUT
+          echo "Using base image: $BASE_IMAGE"
+
       - name: Build and push HF Docker image
         uses: docker/build-push-action@v5
         with:
@@ -202,6 +216,8 @@ jobs:
           push: true
           tags: ${{ steps.meta_hf.outputs.tags }}
           labels: ${{ steps.meta_hf.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=${{ steps.base_image.outputs.base-image }}
           cache-from: type=gha,scope=hf-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=hf-${{ matrix.suffix }}
           pull: true

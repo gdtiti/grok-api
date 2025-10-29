@@ -6,12 +6,13 @@ colorTo: purple
 sdk: docker
 pinned: false
 license: mit
-short_description: 一个强大的Grok API代理服务
+short_description: 一个强大的API代理服务
+app_port: 8000 # Your application will listen on port 8000
 ---
 
 # Grok2API HuggingFace Space
 
-这是 Grok2API 项目的 HuggingFace Space 版本，提供了一个强大的 Grok API 代理服务。
+这是 Grok2API 项目的 HuggingFace Space 版本，基于预构建的 Docker 镜像，提供了一个强大的 Grok API 代理服务。
 
 ## 功能特性
 
@@ -30,7 +31,7 @@ short_description: 一个强大的Grok API代理服务
 ```bash
 # 应用配置
 HOST=0.0.0.0
-PORT=7860
+PORT=8000
 
 # 镜像配置（可选）
 GROK_USE_MIRROR=false
