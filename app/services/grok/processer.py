@@ -8,6 +8,7 @@ from typing import AsyncGenerator
 
 from app.core.config import setting
 from app.core.exception import GrokApiException
+from app.core.url_manager import get_grok_assets_url
 from app.core.logger import logger
 from app.models.openai_schema import (
     OpenAIChatCompletionResponse,
@@ -103,7 +104,7 @@ class GrokResponseProcessor:
                 if video_resp := grok_resp.get("streamingVideoGenerationResponse"):
                     if video_url := video_resp.get("videoUrl"):
                         logger.debug(f"[Processor] 检测到视频生成: {video_url}")
-                        full_video_url = f"https://assets.grok.com/{video_url}"
+                        full_video_url = get_grok_assets_url(video_url)
                         
                         # 下载并缓存视频
                         try:
@@ -168,7 +169,7 @@ class GrokResponseProcessor:
                                 if base64_str:
                                     content += f"\n![Generated Image]({base64_str})"
                                 else:
-                                    content += f"\n![Generated Image](https://assets.grok.com/{img})"
+                                    content += f"\n![Generated Image]({get_grok_assets_url(img)})"
                             else:
                                 # url 模式：缓存并返回链接
                                 cache_path = await image_cache_service.download_image(f"/{img}", auth_token)
@@ -178,10 +179,10 @@ class GrokResponseProcessor:
                                     img_url = f"{base_url}/images/{img_path}" if base_url else f"/images/{img_path}"
                                     content += f"\n![Generated Image]({img_url})"
                                 else:
-                                    content += f"\n![Generated Image](https://assets.grok.com/{img})"
+                                    content += f"\n![Generated Image]({get_grok_assets_url(img)})"
                         except Exception as e:
                             logger.warning(f"[Processor] 处理图片失败: {e}")
-                            content += f"\n![Generated Image](https://assets.grok.com/{img})"
+                            content += f"\n![Generated Image]({get_grok_assets_url(img)})"
 
                 # 返回 OpenAI 响应格式
                 result = OpenAIChatCompletionResponse(
@@ -325,7 +326,7 @@ class GrokResponseProcessor:
                         # 处理视频URL
                         if v_url:
                             logger.debug(f"[Processor] 视频生成完成")
-                            full_video_url = f"https://assets.grok.com/{v_url}"
+                            full_video_url = get_grok_assets_url(v_url)
                             
                             try:
                                 cache_path = await video_cache_service.download_video(f"/{v_url}", auth_token)
@@ -400,7 +401,7 @@ class GrokResponseProcessor:
                                                 yield make_chunk(f"![Generated Image]({base64_str})\n")
                                                 chunk_index += 1
                                         else:
-                                            yield make_chunk(f"![Generated Image](https://assets.grok.com/{img})\n")
+                                            yield make_chunk(f"![Generated Image]({get_grok_assets_url(img)})\n")
                                             chunk_index += 1
                                     else:
                                         # url 模式：缓存并返回链接
@@ -412,7 +413,7 @@ class GrokResponseProcessor:
                                         content += f"![Generated Image]({img_url})\n"
                                 except Exception as e:
                                     logger.warning(f"[Processor] 处理图片失败: {e}")
-                                    content += f"![Generated Image](https://assets.grok.com/{img})\n"
+                                    content += f"![Generated Image]({get_grok_assets_url(img)})\n"
 
                             # 发送内容
                             yield make_chunk(content.strip(), "stop")

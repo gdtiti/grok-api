@@ -1,14 +1,38 @@
 name: Build Docker Image
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: '要构建的分支名称'
+        required: true
+        default: 'main'
+        type: string
+      version:
+        description: '版本标签 (可选，留空则使用分支名)'
+        required: false
+        default: ''
+        type: string
+      push_image:
+        description: '是否推送镜像到库'
+        required: true
+        default: true
+        type: boolean
+      create_release_tag:
+        description: '是否创建发布标签'
+        required: false
+        default: false
+        type: boolean
+      deploy_to_hf:
+        description: '是否部署到 HuggingFace Space'
+        required: false
+        default: false
+        type: boolean
+      hf_space_name:
+        description: 'HuggingFace Space 名称 (如: username/grok2api-space)'
+        required: false
+        default: ''
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -36,6 +60,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'main' }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -53,19 +79,19 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # 分支推送
-            type=ref,event=branch,suffix=-${{ matrix.suffix }}
-            # 语义化版本：完整版本号
-            type=semver,pattern={{version}},suffix=-${{ matrix.suffix }}
-            # latest标签
-            type=raw,value=latest-${{ matrix.suffix }},enable={{is_default_branch}}
+            # 自定义版本标签
+            type=raw,value=${{ github.event.inputs.version || github.event.inputs.branch }},suffix=-${{ matrix.suffix }},enable=${{ github.event.inputs.version != '' }}
+            # 分支标签
+            type=raw,value=${{ github.event.inputs.branch }},suffix=-${{ matrix.suffix }},enable=${{ github.event.inputs.version == '' }}
+            # latest标签 (仅当分支为main时)
+            type=raw,value=latest-${{ matrix.suffix }},enable=${{ github.event.inputs.branch == 'main' && github.event.inputs.version == '' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.event.inputs.push_image == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.suffix }}
@@ -76,7 +102,7 @@ jobs:
   merge-manifests:
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: github.event_name != 'pull_request'
+    if: github.event.inputs.push_image == 'true'
     permissions:
       contents: read
       packages: write
@@ -95,9 +121,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            # 自定义版本标签
+            type=raw,value=${{ github.event.inputs.version || github.event.inputs.branch }},enable=${{ github.event.inputs.version != '' }}
+            # 分支标签
+            type=raw,value=${{ github.event.inputs.branch }},enable=${{ github.event.inputs.version == '' }}
+            # latest标签 (仅当分支为main时)
+            type=raw,value=latest,enable=${{ github.event.inputs.branch == 'main' && github.event.inputs.version == '' }}
       
       - name: Create and push manifest
         run: |
@@ -108,3 +137,118 @@ jobs:
               ${tag}-amd64 \
               ${tag}-arm64
           done
+
+      - name: Create Git tag (if requested)
+        if: github.event.inputs.create_release_tag == 'true' && github.event.inputs.version != ''
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "创建 Git 标签: $VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin "$VERSION"
+
+  # 部署到 HuggingFace Space
+  deploy-to-huggingface:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event.inputs.deploy_to_hf == 'true' && github.event.inputs.push_image == 'true'
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # AMD64 平台
+          - platform: linux/amd64
+            suffix: amd64
+          # ARM64 平台
+          - platform: linux/arm64
+            suffix: arm64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'main' }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for HF
+        id: meta_hf
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # HF专用标签
+            type=raw,value=hf-${{ matrix.suffix }}-${{ github.event.inputs.version || github.event.inputs.branch }}
+
+      - name: Build and push HF Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./hf/Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.meta_hf.outputs.tags }}
+          labels: ${{ steps.meta_hf.outputs.labels }}
+          cache-from: type=gha,scope=hf-${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=hf-${{ matrix.suffix }}
+          pull: true
+
+      - name: Deploy to HuggingFace Space
+        if: matrix.suffix == 'amd64' && github.event.inputs.hf_space_name != ''
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # 安装 huggingface_hub
+          pip install huggingface_hub
+
+          # 创建 Python 脚本来更新 Space
+          cat > update_hf_space.py << 'EOF'
+          import os
+          from huggingface_hub import HfApi
+
+          hf_token = os.getenv('HF_TOKEN')
+          space_name = '${{ github.event.inputs.hf_space_name }}'
+          version = '${{ github.event.inputs.version || github.event.inputs.branch }}'
+          image_tag = '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:hf-amd64-' + version
+
+          if not hf_token:
+              print("错误: 未设置 HF_TOKEN")
+              exit(1)
+
+          if not space_name:
+              print("错误: 未设置 HuggingFace Space 名称")
+              exit(1)
+
+          api = HfApi(token=hf_token)
+
+          try:
+              # 更新 Space 的 Docker 镜像
+              api.space_repo(
+                  repo_id=space_name,
+                  space_sdk="docker",
+                  docker_image=image_tag
+              )
+              print(f"✅ 成功更新 HuggingFace Space: {space_name}")
+              print(f"📦 镜像地址: {image_tag}")
+              print(f"🌐 Space 地址: https://huggingface.co/spaces/{space_name}")
+          except Exception as e:
+              print(f"❌ 更新失败: {e}")
+              print(f"请手动更新 Space {space_name} 的 Docker 镜像为: {image_tag}")
+              exit(1)
+          EOF
+
+          # 执行更新脚本
+          python update_hf_space.py

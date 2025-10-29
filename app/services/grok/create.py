@@ -8,9 +8,10 @@ from app.services.grok.statsig import get_dynamic_headers
 from app.core.exception import GrokApiException
 from app.core.config import setting
 from app.core.logger import logger
+from app.core.url_manager import get_grok_api_url, get_grok_assets_url
 
-# 常量定义
-CREATE_ENDPOINT = "https://grok.com/rest/media/post/create"
+# 常量定义（通过 URL 管理器动态获取）
+CREATE_ENDPOINT = get_grok_api_url("rest/media/post/create")
 REQUEST_TIMEOUT = 30
 IMPERSONATE_BROWSER = "chrome133a"
 
@@ -44,7 +45,7 @@ class PostCreateManager:
                 raise GrokApiException("认证令牌缺失", "NO_AUTH_TOKEN")
 
             # 构建创建数据
-            media_url = f"https://assets.grok.com/{file_uri}"
+            media_url = get_grok_assets_url(file_uri)
             
             create_data = {
                 "media_url": media_url,

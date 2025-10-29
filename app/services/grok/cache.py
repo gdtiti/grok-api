@@ -9,6 +9,7 @@ from curl_cffi.requests import AsyncSession
 from app.core.config import setting
 from app.core.logger import logger
 from app.services.grok.statsig import get_dynamic_headers
+from app.core.url_manager import get_grok_assets_url, get_grok_referer_url
 
 
 class CacheService:
@@ -42,7 +43,7 @@ class CacheService:
                 "Sec-Fetch-Site": "same-site",
                 "Sec-Fetch-User": "?1",
                 "Upgrade-Insecure-Requests": "1",
-                "Referer": "https://grok.com/",
+                "Referer": get_grok_referer_url(),
                 "Cookie": f"{auth_token};{cf_clearance}" if cf_clearance else auth_token
             }
 
@@ -54,9 +55,10 @@ class CacheService:
                 logger.debug(f"[{self.cache_type.upper()}Cache] 使用缓存代理: {proxy_url.split('@')[-1] if '@' in proxy_url else proxy_url}")
 
             async with AsyncSession() as session:
-                logger.debug(f"[{self.cache_type.upper()}Cache] 缓存生成视频文件: https://assets.grok.com{file_path}")
+                assets_url = get_grok_assets_url(file_path)
+                logger.debug(f"[{self.cache_type.upper()}Cache] 缓存生成视频文件: {assets_url}")
                 response = await session.get(
-                    f"https://assets.grok.com{file_path}",
+                    assets_url,
                     headers=headers,
                     proxies=proxies,
                     timeout=timeout,

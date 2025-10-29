@@ -11,9 +11,10 @@ from app.services.grok.statsig import get_dynamic_headers
 from app.core.exception import GrokApiException
 from app.core.config import setting
 from app.core.logger import logger
+from app.core.url_manager import get_grok_api_url
 
-# 常量定义
-UPLOAD_ENDPOINT = "https://grok.com/rest/app-chat/upload-file"
+# 常量定义（通过 URL 管理器动态获取）
+UPLOAD_ENDPOINT = get_grok_api_url("rest/app-chat/upload-file")
 REQUEST_TIMEOUT = 30
 IMPERSONATE_BROWSER = "chrome133a"
 DEFAULT_MIME_TYPE = "image/jpeg"

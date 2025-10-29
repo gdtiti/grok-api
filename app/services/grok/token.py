@@ -13,9 +13,10 @@ from app.core.exception import GrokApiException
 from app.core.logger import logger
 from app.core.config import setting
 from app.services.grok.statsig import get_dynamic_headers
+from app.core.url_manager import get_grok_api_url
 
-# 常量定义
-RATE_LIMIT_ENDPOINT = "https://grok.com/rest/rate-limits"
+# 常量定义（通过 URL 管理器动态获取）
+RATE_LIMIT_ENDPOINT = get_grok_api_url("rest/rate-limits")
 REQUEST_TIMEOUT = 30
 IMPERSONATE_BROWSER = "chrome133a"
 MAX_FAILURE_COUNT = 3

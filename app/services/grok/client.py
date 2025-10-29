@@ -8,6 +8,7 @@ from curl_cffi import requests as curl_requests
 
 from app.core.config import setting
 from app.core.logger import logger
+from app.core.url_manager import get_grok_api_url, get_grok_assets_url, get_grok_imagine_url, get_grok_referer_url
 from app.models.grok_models import Models
 from app.services.grok.processer import GrokResponseProcessor
 from app.services.grok.statsig import get_dynamic_headers
@@ -16,8 +17,8 @@ from app.services.grok.upload import ImageUploadManager
 from app.services.grok.create import PostCreateManager
 from app.core.exception import GrokApiException
 
-# 常量定义
-GROK_API_ENDPOINT = "https://grok.com/rest/app-chat/conversations/new"
+# 常量定义（通过 URL 管理器动态获取）
+GROK_API_ENDPOINT = get_grok_api_url("rest/app-chat/conversations/new")
 REQUEST_TIMEOUT = 120
 IMPERSONATE_BROWSER = "chrome133a"
 MAX_RETRY = 3  # 最大重试次数
@@ -173,9 +174,9 @@ class GrokClient:
             
             # 构建 URL 消息
             if post_id:
-                image_message = f"https://grok.com/imagine/{post_id}  {content} --mode=custom"
+                image_message = f"{get_grok_imagine_url(post_id)}  {content} --mode=custom"
             else:
-                image_message = f"https://assets.grok.com/post/{image_url}  {content} --mode=custom"
+                image_message = f"{get_grok_assets_url(f'post/{image_url}')}  {content} --mode=custom"
             
             payload = {
                 "temporary": True,
@@ -202,7 +203,7 @@ class GrokClient:
                 file_attachments = payload.get("fileAttachments", [])
                 referer_id = post_id if post_id else (file_attachments[0] if file_attachments else "")
                 if referer_id:
-                    headers["Referer"] = f"https://grok.com/imagine/{referer_id}"
+                    headers["Referer"] = get_grok_imagine_url(referer_id)
             
             # 使用服务代理
             proxy_url = setting.get_service_proxy()

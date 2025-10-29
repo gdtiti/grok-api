@@ -8,6 +8,7 @@ from typing import Dict
 
 from app.core.logger import logger
 from app.core.config import setting
+from app.core.url_manager import get_grok_api_url
 
 
 def _generate_random_string(length: int, use_letters: bool = True) -> str:
@@ -87,7 +88,7 @@ def get_dynamic_headers(pathname: str = "/rest/app-chat/conversations/new") -> D
         "Accept-Encoding": "gzip, deflate, br, zstd",
         "Content-Type": "application/json" if "upload-file" not in pathname else "text/plain;charset=UTF-8",
         "Connection": "keep-alive",
-        "Origin": "https://grok.com",
+        "Origin": get_grok_api_url(""),
         "Priority": "u=1, i",
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
         "Sec-Ch-Ua": '"Not(A:Brand";v="99", "Google Chrome";v="133", "Chromium";v="133"',
