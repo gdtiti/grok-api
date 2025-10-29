@@ -36,7 +36,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-api
+  IMAGE_NAME: grok-api
 
 jobs:
   build-and-push:
